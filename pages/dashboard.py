@@ -72,6 +72,7 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np # Import numpy for demonstration
 
 # --- Configuration ---
 DATA_FILE = 'combined_traffic_data.csv' # Make sure this file exists in your project directory
@@ -86,7 +87,6 @@ def load_data():
         if 'BrakeStatus' not in df.columns:
             # Add dummy BrakeStatus for demonstration if it's missing
             # In a real scenario, you'd ensure your data has this column
-            import numpy as np
             np.random.seed(42)
             df['BrakeStatus'] = np.random.choice(['Normal', 'Warning', 'Fault'], size=len(df))
         return df
@@ -141,22 +141,16 @@ if not filtered_df.empty:
 else:
     st.info("No data available for the selected filters to display speed distribution.")
 
----
-### Brake Status Analysis
-
-Here's the corrected **Brake Status Analysis** section you requested. We calculate the counts of each `BrakeStatus` and then use `seaborn.barplot` with the `hue='BrakeStatus'` parameter to ensure each status gets a distinct color.
-
-```python
 # --- Brake Status Analysis Plot ---
 st.subheader("Brake Status Analysis")
 if not filtered_df.empty and 'BrakeStatus' in filtered_df.columns:
     brake_status_counts = filtered_df['BrakeStatus'].value_counts().reset_index()
     brake_status_counts.columns = ['BrakeStatus', 'Count']
-    
+
     fig_brake, ax_brake = plt.subplots(figsize=(8, 6))
     # Use 'hue' to assign different colors based on 'BrakeStatus'
     sns.barplot(x='BrakeStatus', y='Count', data=brake_status_counts, ax=ax_brake, hue='BrakeStatus', palette='viridis', legend=False)
-    
+
     ax_brake.set_title('Counts of Brake Status Events')
     ax_brake.set_xlabel('Brake Status')
     ax_brake.set_ylabel('Number of Events')
