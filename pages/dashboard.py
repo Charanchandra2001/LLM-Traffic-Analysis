@@ -149,7 +149,7 @@ if not filtered_df.empty and 'BrakeStatus' in filtered_df.columns:
 
     fig_brake, ax_brake = plt.subplots(figsize=(8, 6))
     # Use 'hue' to assign different colors based on 'BrakeStatus'
-    sns.barplot(x='BrakeStatus', y='Count', data=brake_status_counts, ax=ax_brake, hue='BrakeStatus', palette='viridis', legend=False)
+    sns.barplot(x='BrakeStatus', y='Count', data=brake_status_counts, ax=ax_brake, hue='BrakeStatus', legend=False)
 
     ax_brake.set_title('Counts of Brake Status Events')
     ax_brake.set_xlabel('Brake Status')
