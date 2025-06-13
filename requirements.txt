@@ -8,6 +8,7 @@ python-dotenv
 openai
 langchain
 langchain-community
+langchain-openai
 faiss-cpu
 streamlit
 huggingface-hub
