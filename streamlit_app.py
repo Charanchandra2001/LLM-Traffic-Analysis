@@ -56,9 +56,9 @@ df, model = load_data_and_model()
 # For this Streamlit app demonstration, we'll use placeholder values.
 metrics = {
     "Accuracy": 1.0,
-    "Precision": 0.98,
-    "Recall": 0.95,
-    "F1-Score": 0.98
+    "Precision": 1.0,
+    "Recall": 1.0,
+    "F1-Score": 1.0
 }
 
 # --- LLM Integration Setup ---
