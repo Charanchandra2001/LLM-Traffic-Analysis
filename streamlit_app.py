@@ -89,7 +89,6 @@ if st.button("Generate Report", type="primary"):
     if query:
         with st.spinner("Generating report... This may take a moment."):
             report = generate_report(query, vector_store, openai_client)
-            st.subheader("Generated Report")
             st.markdown(report)
     else:
         st.warning("Please enter a query to generate a report.")
