@@ -80,7 +80,6 @@ st.title("🚦 Traffic Analysis Report Generator")
 st.markdown("Enter your query to get a detailed report on traffic conditions and safety insights, powered by an LLM.")
 
 query = st.text_area(
-    "**Enter your query here:**",
     "What are the traffic conditions, safety insights for high brake events, and the key findings and summary statistics from the latest data analysis?",
     height=100
 )
