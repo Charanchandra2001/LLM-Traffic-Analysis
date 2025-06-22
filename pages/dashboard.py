@@ -69,4 +69,4 @@ else:
 
 # Add Vehicle Distribution by Direction visualization below the rest
 st.subheader("Vehicle Distribution by Direction")
-st.image('direction_distribution.png', caption='Vehicle Distribution by Direction', use_column_width=True)
+st.image('direction_distribution.png', caption='Vehicle Distribution by Direction', use_container_width=True)
