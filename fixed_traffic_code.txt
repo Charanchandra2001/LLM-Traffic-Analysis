@@ -1,0 +1,276 @@
+% Load BSM and SPAT data
+bsmFiles = dir('BSM_Page_*.csv');
+spatFiles = dir('SPAT_Page_*.csv');
+
+bsmData = [];
+for i = 1:length(bsmFiles)
+    T = readtable(bsmFiles(i).name);
+    bsmData = [bsmData; T];
+end
+
+spatData = [];
+for i = 1:length(spatFiles)
+    T = readtable(spatFiles(i).name);
+    if ismember('var1', T.Properties.VariableNames)
+        T.Properties.VariableNames{'var1'} = 'Time';
+    end
+    spatData = [spatData; T];
+end
+
+% Merge on Time
+combinedData = innerjoin(bsmData, spatData, 'Keys', 'Time');
+combinedData = rmmissing(combinedData);
+
+% Save for reference
+writetable(combinedData, 'combined_traffic_data.csv');
+
+% --- 1. Create 4-way traffic model with 4 phases
+% Simulate phase data (assuming Time correlates with phases)
+timeSeconds = seconds(combinedData.Time - combinedData.Time(1)); % Convert to seconds from start
+phaseDurations = [30, 5, 30, 5]; % NS Green, NS Yellow, EW Green, EW Yellow (seconds)
+phaseCycle = {'NS_Green', 'NS_Yellow', 'EW_Green', 'EW_Yellow'};
+totalCycleTime = sum(phaseDurations);
+phaseData = cell(size(timeSeconds));
+
+for i = 1:length(timeSeconds)
+    cyclePosition = mod(timeSeconds(i), totalCycleTime);
+    phaseTimes = cumsum(phaseDurations);
+    phaseIdx = find(cyclePosition <= phaseTimes, 1, 'first');
+    if isempty(phaseIdx)
+        phaseIdx = 1;
+    end
+    phaseData{i} = phaseCycle{phaseIdx};
+end
+combinedData.Phase = categorical(phaseData);
+
+% --- Add Direction based on Longitude and Latitude
+refLat = mean(combinedData.Latitude);
+refLon = mean(combinedData.Longitude);
+combinedData.Direction = categorical(...
+    arrayfun(@(lat, lon) determineDirection(lat, lon, refLat, refLon), ...
+    combinedData.Latitude, combinedData.Longitude, 'UniformOutput', false));
+
+% --- 2. Prepare ground truth
+% Playback (display first 10 rows)
+disp('Playback of Simulation Data (First 10 rows):');
+disp(combinedData(1:min(10, height(combinedData)), :));
+
+% Average simulation stats
+if ismember('Speed', combinedData.Properties.VariableNames) && ismember('Heading', combinedData.Properties.VariableNames)
+    avgStats = mean(combinedData{:, {'Speed', 'Heading'}}, 1, 'omitnan');
+    disp('Average Simulation Stats:');
+    disp(avgStats);
+end
+
+% Identify hard braking events (e.g., Speed > 25 km/h with BrakeStatus = 1)
+if ismember('BrakeStatus', combinedData.Properties.VariableNames)
+    combinedData.HardBraking = double((combinedData.Speed > 25) & (combinedData.BrakeStatus == 1));
+    groundTruth = combinedData(combinedData.HardBraking == 1, :);
+    disp('Ground Truth - Hard Braking Events:');
+    if height(groundTruth) > 0
+        disp(groundTruth(:, {'Time', 'VehicleID', 'Speed', 'BrakeStatus', 'HardBraking'}));
+        writetable(groundTruth, 'ground_truth_hard_braking.csv');
+    else
+        disp('No hard braking events found.');
+    end
+else
+    warning('BrakeStatus column not found. Creating dummy data.');
+    combinedData.BrakeStatus = randi([0, 1], height(combinedData), 1);
+    combinedData.HardBraking = double((combinedData.Speed > 25) & (combinedData.BrakeStatus == 1));
+end
+
+% --- 3. Create log pages for each direction (NEWS) per vehicle
+% Define NEWS score calculation
+combinedData.NEWS_Score = arrayfun(@(speed, brakeStatus, hardBraking) ...
+    min(double(speed > 25) * 3 + double(brakeStatus == 1) * 4 + double(hardBraking == 1) * 2, 9), ...
+    combinedData.Speed, combinedData.BrakeStatus, combinedData.HardBraking);
+
+% Create NEWS logs for each direction
+directions = categories(combinedData.Direction); % Get unique direction categories
+newsLogs = struct();
+for i = 1:length(directions)
+    dir = directions{i};
+    dirData = combinedData(combinedData.Direction == categorical({dir}), :);
+    if height(dirData) > 0
+        logSheet = dirData(:, {'Time', 'VehicleID', 'Speed', 'BrakeStatus', 'HardBraking', 'NEWS_Score'});
+        newsLogFile = sprintf('NEWS_Log_%s.csv', dir);
+        writetable(logSheet, newsLogFile);
+        newsLogs.(matlab.lang.makeValidName(dir)) = logSheet;
+        fprintf('Generated %s with %d entries\n', newsLogFile, height(logSheet));
+    end
+end
+
+% Display sample if North direction exists
+if isfield(newsLogs, 'North') && height(newsLogs.North) > 0
+    disp('Sample NEWS Log for North:');
+    disp(newsLogs.North(1:min(5, height(newsLogs.North)), :));
+end
+
+% --- 4. Preprocess the data with each direction and place in a JSON file
+% Normalize Speed
+speedData = combinedData.Speed;
+speedMin = min(speedData);
+speedMax = max(speedData);
+if speedMax > speedMin
+    combinedData.Speed_Normalized = (combinedData.Speed - speedMin) / (speedMax - speedMin);
+else
+    combinedData.Speed_Normalized = zeros(size(combinedData.Speed));
+end
+
+% Organize by direction into a struct for JSON-like output
+preprocessedData = struct();
+for i = 1:length(directions)
+    dir = directions{i};
+    dirData = combinedData(combinedData.Direction == categorical({dir}), :);
+    if height(dirData) > 0
+        preprocessedData.(matlab.lang.makeValidName(dir)) = table2struct(...
+            dirData(:, {'Time', 'VehicleID', 'Speed_Normalized', 'BrakeStatus', 'HardBraking', 'NEWS_Score'}));
+    end
+end
+
+% Save to JSON-like struct file
+save('preprocessed_traffic_data.mat', 'preprocessedData');
+disp('Preprocessed data saved to ''preprocessed_traffic_data.mat''');
+
+% --- 5. Create a filter for durations
+filterByDuration = @(startTime, endTime) combinedData(...
+    (combinedData.Time >= startTime) & (combinedData.Time <= endTime), :);
+
+% Example usage: Filter for the first 60 seconds
+minTime = min(combinedData.Time);
+maxTime = max(combinedData.Time);
+if isdatetime(minTime)
+    startTime = minTime;
+    endTime = minTime + seconds(60);
+else
+    % If Time is not datetime, use first 60 entries as example
+    startIdx = 1;
+    endIdx = min(60, height(combinedData));
+    filteredData = combinedData(startIdx:endIdx, :);
+    startTime = [];
+    endTime = [];
+end
+
+if ~isempty(startTime) && ~isempty(endTime)
+    filteredData = filterByDuration(startTime, endTime);
+    disp('Data Filtered for First 60 Seconds:');
+    disp(filteredData(:, {'Time', 'VehicleID', 'Speed', 'BrakeStatus'}));
+    writetable(filteredData, 'filtered_traffic_data_60s.csv');
+    disp('Filtered data saved to ''filtered_traffic_data_60s.csv''');
+end
+
+% --- Prepare Features & Target (Updated with new features)
+predictorVars = {'Speed', 'Heading', 'VehicleID', 'Longitude', 'Latitude', 'NEWS_Score', 'Phase'};
+
+% Check for TimeRemaining and State columns
+if ismember('TimeRemaining', combinedData.Properties.VariableNames)
+    predictorVars{end+1} = 'TimeRemaining';
+end
+if ismember('State', combinedData.Properties.VariableNames)
+    predictorVars{end+1} = 'State';
+end
+
+% Filter predictor variables to only include existing ones
+existingVars = predictorVars(ismember(predictorVars, combinedData.Properties.VariableNames));
+
+if length(existingVars) >= 3  % Need at least 3 predictors for meaningful analysis
+    predictors = combinedData(:, existingVars);
+    response = combinedData.BrakeStatus;
+    
+    % Convert categorical variables
+    for i = 1:width(predictors)
+        colName = predictors.Properties.VariableNames{i};
+        if iscellstr(predictors.(colName)) || iscategorical(predictors.(colName))
+            predictors.(colName) = grp2idx(categorical(predictors.(colName)));
+        end
+    end
+    
+    if iscategorical(response)
+        response = grp2idx(response) - 1;  % assume positive = 1
+    end
+    
+    % Convert table to matrix
+    X = table2array(predictors);
+    Y = response;
+    
+    % Display class distribution
+    disp("Class Distribution:");
+    tabulate(Y)
+    
+    % --- Use a more stable ensemble (TreeBagger or Bagging)
+    rng(1);  % for reproducibility
+    try
+        mdl = fitcensemble(X, Y, ...
+            'Method', 'Bag', ...
+            'NumLearningCycles', 50, ...  % Reduced for faster execution
+            'Learners', 'Tree');
+        
+        % Predict and evaluate
+        yhat = predict(mdl, X);
+        [confMat, order] = confusionmat(Y, yhat);
+        
+        % Confusion Matrix Plot
+        figure;
+        confusionchart(confMat, order);
+        title('Confusion Matrix - BrakeStatus Prediction');
+        saveas(gcf, 'confusion_matrix.png');
+        
+        % Metrics Calculation
+        if size(confMat, 1) >= 2 && size(confMat, 2) >= 2
+            TP = confMat(2,2);
+            FP = confMat(1,2);
+            FN = confMat(2,1);
+            TN = confMat(1,1);
+            
+            accuracy = (TP + TN) / sum(confMat(:));
+            precision = TP / max((TP + FP), eps);
+            recall = TP / max((TP + FN), eps);
+            f1_score = 2 * (precision * recall) / max((precision + recall), eps);
+            
+            % Display metrics
+            fprintf('Accuracy: %.4f\n', accuracy);
+            fprintf('Precision: %.4f\n', precision);
+            fprintf('Recall: %.4f\n', recall);
+            fprintf('F1-Score: %.4f\n', f1_score);
+        else
+            disp('Confusion matrix has insufficient classes for detailed metrics.');
+        end
+        
+        % Feature Importance
+        imp = predictorImportance(mdl);
+        figure;
+        bar(imp);
+        set(gca, 'XTickLabel', existingVars);
+        xlabel('Predictor');
+        ylabel('Importance');
+        title('Feature Importance in BrakeStatus Prediction');
+        xtickangle(45);  % Rotate labels for better readability
+        saveas(gcf, 'feature_importance.png');
+        
+        % Save the model
+        save('traffic_model_bagged.mat', 'mdl');
+        disp('Model saved successfully.');
+        
+    catch ME
+        fprintf('Error in model training: %s\n', ME.message);
+        disp('Skipping model training due to data issues.');
+    end
+else
+    warning('Insufficient predictor variables found. Skipping model training.');
+end
+
+% Helper function for determining direction
+function dir = determineDirection(lat, lon, refLat, refLon)
+    tolerance = 0.001;  % Adjust based on your coordinate precision
+    if lat > refLat && abs(lon - refLon) < tolerance
+        dir = 'North';
+    elseif lat < refLat && abs(lon - refLon) < tolerance
+        dir = 'South';
+    elseif lon > refLon && abs(lat - refLat) < tolerance
+        dir = 'East';
+    elseif lon < refLon && abs(lat - refLat) < tolerance
+        dir = 'West';
+    else
+        dir = 'Unknown';
+    end
+end

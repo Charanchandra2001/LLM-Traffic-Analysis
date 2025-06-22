@@ -22,6 +22,13 @@ This report provides an analysis of the traffic conditions and safety insights b
 - **Positional Data:**
   - The vehicles remained in a close vicinity, as suggested by the positional accuracy level of 1.5. This implies that navigation is precise, and position tracking is reliable.
 
+Summary Statistics:
+Total records: 217
+Hard braking events: 0
+Average NEWS Score: 1.75
+Unique phases: 1
+Unique directions: 4
+
 ## Recommendations
 Based on the data analysis, the following recommendations are proposed:
 1. **Increase Monitoring During Peak Times:**
