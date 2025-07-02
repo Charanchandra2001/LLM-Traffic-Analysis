@@ -8,6 +8,7 @@ from openai import OpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
+from datetime import datetime, timedelta
 
 # Load environment variables from .env file
 load_dotenv()
@@ -54,18 +55,59 @@ def load_event_summary():
 
 event_summary_text = load_event_summary()
 
+# --- Dummy Event Data for Analysis ---
+dummy_now = datetime.now()
+dummy_event_df = pd.DataFrame({
+    'Time': [dummy_now, dummy_now + timedelta(minutes=1), dummy_now + timedelta(minutes=2)],
+    'VehicleID': [1, 2, 1],
+    'EventType': ['HardBraking', 'NearMiss', 'HardBraking'],
+    'Speed': [30, 15, 28],
+    'SpeedDrop': [12, 11, 13],
+    'Latitude': [39.162, 39.163, 39.164],
+    'Longitude': [-84.519, -84.520, -84.521]
+})
+
+def generate_dummy_event_analysis(df):
+    # Event type breakdown
+    event_type_counts = df['EventType'].value_counts()
+    event_type_summary = ", ".join([f"{etype}: {count}" for etype, count in event_type_counts.items()])
+    # Event timing
+    times = pd.to_datetime(df['Time'])
+    time_range = f"from {times.min().strftime('%Y-%m-%d %H:%M:%S')} to {times.max().strftime('%Y-%m-%d %H:%M:%S')}"
+    # Speed distribution
+    speed_stats = df.groupby('EventType')['Speed'].describe().to_dict()
+    speed_summary = ""
+    for etype in event_type_counts.index:
+        stats = speed_stats['mean'][etype], speed_stats['min'][etype], speed_stats['max'][etype]
+        speed_summary += f"{etype}: mean={stats[0]:.1f}, min={stats[1]}, max={stats[2]}. "
+    # Vehicle-specific
+    vehicle_events = df.groupby('VehicleID').size().to_dict()
+    vehicle_summary = ", ".join([f"Vehicle {vid}: {count} events" for vid, count in vehicle_events.items()])
+    # Compose analysis
+    analysis = f"""
+Dummy Event Data Analysis:
+- Event types observed: {event_type_summary}
+- Events occurred {time_range}.
+- Speed by event type: {speed_summary}
+- Events per vehicle: {vehicle_summary}
+- Note: This is based on in-memory dummy data for demonstration purposes.
+"""
+    return analysis
+
+dummy_event_analysis = generate_dummy_event_analysis(dummy_event_df)
+
 # --- LLM Integration Setup ---
 @st.cache_resource
-def setup_llm_integration(dataframe, summary_findings, event_summary_text):
+def setup_llm_integration(dataframe, summary_findings, event_summary_text, dummy_event_analysis):
     """Sets up the text data, splits it into chunks, and creates the FAISS vector store."""
-    text_data = summary_findings + "\n\n" + event_summary_text + "\n\n" + dataframe.to_string(index=False)
+    text_data = summary_findings + "\n\n" + dummy_event_analysis + "\n\n" + event_summary_text + "\n\n" + dataframe.to_string(index=False)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text_data)
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     vector_store = FAISS.from_texts(chunks, embeddings)
     return vector_store
 
-vector_store = setup_llm_integration(df, summary_findings, event_summary_text)
+vector_store = setup_llm_integration(df, summary_findings, event_summary_text, dummy_event_analysis)
 
 # --- Report Generation Function ---
 def generate_report(query, vector_store_instance, openai_client_instance):
