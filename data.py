@@ -170,18 +170,18 @@ if 'BrakeStatus' not in combinedData.columns:
     print("Warning: BrakeStatus column not found. Creating dummy data.")
     combinedData['BrakeStatus'] = np.random.choice([0, 1], len(combinedData))
 
-    y = combinedData['BrakeStatus']
+y = combinedData['BrakeStatus']
 X = combinedData[required_features].fillna(0)
-    
+
 # Train BaggingClassifier model (MATLAB fitcensemble Bag equivalent)
 print("\n--- Training BaggingClassifier Model (fitcensemble Bag equivalent) ---")
-    model = BaggingClassifier(
-        base_estimator=DecisionTreeClassifier(random_state=42),
-        n_estimators=50,
-        random_state=42
-    )
-    model.fit(X, y)
-    
+model = BaggingClassifier(
+    base_estimator=DecisionTreeClassifier(random_state=42),
+    n_estimators=50,
+    random_state=42
+)
+model.fit(X, y)
+
 # Save the model
 joblib.dump(model, 'bagging_model.pkl')
 print("Model saved as bagging_model.pkl")
@@ -192,20 +192,20 @@ print(required_features)
 
 # Feature importance plot (average over all trees)
 feature_importance = np.zeros(len(required_features))
-    for estimator in model.estimators_:
-        feature_importance += estimator.feature_importances_
-    feature_importance /= len(model.estimators_)
-    indices = np.argsort(feature_importance)[::-1]
+for estimator in model.estimators_:
+    feature_importance += estimator.feature_importances_
+feature_importance /= len(model.estimators_)
+indices = np.argsort(feature_importance)[::-1]
 plt.figure(figsize=(10, 6))
 plt.bar(range(X.shape[1]), feature_importance[indices], align='center')
 plt.xticks(range(X.shape[1]), [required_features[i] for i in indices], rotation=45)
 plt.title('Feature Importance (BaggingClassifier)')
 plt.xlabel('Feature')
-    plt.ylabel('Importance')
-    plt.tight_layout()
-    plt.savefig('feature_importance.png', dpi=300, bbox_inches='tight')
-    plt.show()
-    
+plt.ylabel('Importance')
+plt.tight_layout()
+plt.savefig('feature_importance.png', dpi=300, bbox_inches='tight')
+plt.show()
+
 print("\n--- Analysis Complete ---")
 
 # --- 7. Save enhanced data
@@ -255,3 +255,58 @@ print(f"Hard braking events: {combinedData['HardBraking'].sum()}")
 print(f"Average NEWS Score: {combinedData['NEWS_Score'].mean():.2f}")
 print(f"Unique phases: {combinedData['Phase'].nunique()}")
 print(f"Unique directions: {combinedData['Direction'].nunique()}")
+
+# --- 8. Near Miss Detection and Event Aggregation ---
+print("\n--- Detecting Near Misses and Aggregating Events ---")
+
+def detect_near_miss(df, speed_drop_threshold=10, time_window=2):
+    """
+    Detects near misses based on sudden speed drops within a short time window for each vehicle.
+    Returns a DataFrame with detected near miss events.
+    """
+    near_miss_events = []
+    if 'Time' in df.columns and 'VehicleID' in df.columns and 'Speed' in df.columns:
+        df = df.sort_values(['VehicleID', 'Time'])
+        for vid, group in df.groupby('VehicleID'):
+            group = group.sort_values('Time')
+            group['SpeedPrev'] = group['Speed'].shift(1)
+            group['TimePrev'] = group['Time'].shift(1)
+            group['SpeedDrop'] = group['SpeedPrev'] - group['Speed']
+            group['TimeDiff'] = (group['Time'] - group['TimePrev']).dt.total_seconds()
+            near_miss = group[(group['SpeedDrop'] >= speed_drop_threshold) & (group['TimeDiff'] <= time_window)]
+            near_miss['EventType'] = 'NearMiss'
+            near_miss_events.append(near_miss)
+        if near_miss_events:
+            return pd.concat(near_miss_events)
+    return pd.DataFrame()
+
+# Detect near misses
+near_miss_df = detect_near_miss(combinedData)
+
+# Combine all events (hard braking and near miss)
+events = []
+if 'HardBraking' in combinedData.columns:
+    hard_brake_events = combinedData[combinedData['HardBraking'] == 1].copy()
+    hard_brake_events['EventType'] = 'HardBraking'
+    events.append(hard_brake_events)
+if not near_miss_df.empty:
+    events.append(near_miss_df)
+
+if events:
+    all_events = pd.concat(events, sort=False)
+else:
+    all_events = pd.DataFrame()
+
+# Aggregate events by minute and hour
+if not all_events.empty and 'Time' in all_events.columns:
+    all_events['Minute'] = all_events['Time'].dt.floor('T')
+    all_events['Hour'] = all_events['Time'].dt.floor('H')
+    event_counts_minute = all_events.groupby('Minute').size().reset_index(name='EventCount')
+    event_counts_hour = all_events.groupby('Hour').size().reset_index(name='EventCount')
+    # Save for dashboard use
+    event_counts_minute.to_csv('event_counts_minute.csv', index=False)
+    event_counts_hour.to_csv('event_counts_hour.csv', index=False)
+    all_events.to_csv('event_summary.csv', index=False)
+    print("Event summary and counts saved for dashboard and LLM use.")
+else:
+    print("No events detected for aggregation.")

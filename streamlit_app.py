@@ -45,18 +45,27 @@ def load_summary_findings():
 
 summary_findings = load_summary_findings()
 
+def load_event_summary():
+    try:
+        df = pd.read_csv('event_summary.csv')
+        return df.to_string(index=False)
+    except Exception:
+        return ""
+
+event_summary_text = load_event_summary()
+
 # --- LLM Integration Setup ---
 @st.cache_resource
-def setup_llm_integration(dataframe, summary_findings):
+def setup_llm_integration(dataframe, summary_findings, event_summary_text):
     """Sets up the text data, splits it into chunks, and creates the FAISS vector store."""
-    text_data = summary_findings + "\n\n" + dataframe.to_string(index=False)
+    text_data = summary_findings + "\n\n" + event_summary_text + "\n\n" + dataframe.to_string(index=False)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text_data)
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     vector_store = FAISS.from_texts(chunks, embeddings)
     return vector_store
 
-vector_store = setup_llm_integration(df, summary_findings)
+vector_store = setup_llm_integration(df, summary_findings, event_summary_text)
 
 # --- Report Generation Function ---
 def generate_report(query, vector_store_instance, openai_client_instance):
@@ -80,7 +89,7 @@ st.title("🚦 Traffic Analysis Report Generator")
 st.markdown("Enter your query to get a detailed report on traffic conditions and safety insights, powered by an LLM.")
 
 query = st.text_area(
-    "**Enter your query here:**",
+    "****",
     "What are the traffic conditions, safety insights for high brake events, and the key findings and summary statistics from the latest data analysis?",
     height=100
 )
@@ -89,7 +98,6 @@ if st.button("Generate Report", type="primary"):
     if query:
         with st.spinner("Generating report... This may take a moment."):
             report = generate_report(query, vector_store, openai_client)
-            st.subheader("Generated Report")
             st.markdown(report)
     else:
         st.warning("Please enter a query to generate a report.")
