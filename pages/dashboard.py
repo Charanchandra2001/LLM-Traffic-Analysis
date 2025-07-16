@@ -153,18 +153,18 @@ ax4.set_title('Speed Distribution by Event Type')
 st.pyplot(fig4)
 plt.close(fig4)
 
-# Vehicle-specific event timeline
-st.subheader("Vehicle-specific Event Timeline")
-vehicle_ids = dummy_event_df['VehicleID'].unique()
-selected_vehicle = st.selectbox("Select Vehicle for Timeline", vehicle_ids)
-vdf = dummy_event_df[dummy_event_df['VehicleID'] == selected_vehicle]
-if not vdf.empty:
-    fig5, ax5 = plt.subplots(figsize=(10, 2))
-    ax5.scatter(vdf['Time'], [1]*len(vdf), c=vdf['EventType'].map({'HardBraking':'red','NearMiss':'blue'}), label='Event')
-    ax5.set_yticks([])
-    ax5.set_xlabel('Time')
-    ax5.set_title(f'Events for Vehicle {selected_vehicle}')
-    st.pyplot(fig5)
-    plt.close(fig5)
-else:
-    st.info("No events for selected vehicle.")
+# # Vehicle-specific event timeline
+# st.subheader("Vehicle-specific Event Timeline")
+# vehicle_ids = dummy_event_df['VehicleID'].unique()
+# selected_vehicle = st.selectbox("Select Vehicle for Timeline", vehicle_ids)
+# vdf = dummy_event_df[dummy_event_df['VehicleID'] == selected_vehicle]
+# if not vdf.empty:
+#     fig5, ax5 = plt.subplots(figsize=(10, 2))
+#     ax5.scatter(vdf['Time'], [1]*len(vdf), c=vdf['EventType'].map({'HardBraking':'red','NearMiss':'blue'}), label='Event')
+#     ax5.set_yticks([])
+#     ax5.set_xlabel('Time')
+#     ax5.set_title(f'Events for Vehicle {selected_vehicle}')
+#     st.pyplot(fig5)
+#     plt.close(fig5)
+# else:
+#     st.info("No events for selected vehicle.")
