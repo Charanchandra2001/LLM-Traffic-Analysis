@@ -89,18 +89,6 @@ dummy_event_df = pd.DataFrame({
 })
 dummy_event_df['Minute'] = pd.to_datetime(dummy_event_df['Time']).dt.floor('T')
 
-# --- Event Timeline and Map Visualization ---
-st.subheader("Event Timeline (Hard Braking & Near Misses)")
-# Timeline plot (events per minute)
-event_counts_minute = dummy_event_df.groupby('Minute').size().reset_index(name='EventCount')
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(event_counts_minute['Minute'], event_counts_minute['EventCount'], marker='o')
-ax.set_title('Event Count per Minute')
-ax.set_xlabel('Time (Minute)')
-ax.set_ylabel('Event Count')
-st.pyplot(fig)
-plt.close(fig)
-
 # Map visualization (if lat/lon available)
 if 'Latitude' in dummy_event_df.columns and 'Longitude' in dummy_event_df.columns:
     st.subheader("Event Locations Map")
