@@ -131,20 +131,6 @@ ax2.set_title('Event Type Proportion')
 st.pyplot(fig2)
 plt.close(fig2)
 
-# Event heatmap by hour of day
-st.subheader("Event Heatmap by Hour of Day")
-dummy_event_df['HourOfDay'] = pd.to_datetime(dummy_event_df['Time']).dt.hour
-hour_counts = dummy_event_df.groupby('HourOfDay').size()
-fig3, ax3 = plt.subplots()
-sns.heatmap(hour_counts.values.reshape(1, -1), cmap='YlOrRd', annot=True, fmt='d', cbar=False, ax=ax3)
-ax3.set_title('Events by Hour of Day')
-ax3.set_xlabel('Hour of Day')
-ax3.set_yticks([])
-ax3.set_xticks(range(24))
-ax3.set_xticklabels([str(h) for h in range(24)])
-st.pyplot(fig3)
-plt.close(fig3)
-
 # Speed vs Event Type boxplot
 st.subheader("Speed vs Event Type")
 fig4, ax4 = plt.subplots()
